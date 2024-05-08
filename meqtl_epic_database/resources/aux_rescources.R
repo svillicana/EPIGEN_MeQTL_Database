@@ -15,7 +15,7 @@ plot.locus <- function(DF) {
   plot_ly(data = DF, type = 'scatter', mode = 'markers', colors = "Set1") %>%
     add_trace(x = ~POS, y = ~LOGP, color = ~`Cis/Trans`,
               # Hover text:
-              text = ~paste("CpG:", CpG, "<br>SNP:", `Top SNP`,
+              text = ~paste("CpG:", CpG, "<br>SNP:", `SNP`,
                             "<br>Beta:", `Beta`, "<br>SE:", `SE`, "<br>P:", `P`),
               alpha = 0.8, marker = list(size = 8)) %>%
     layout(xaxis = list(title = ""),

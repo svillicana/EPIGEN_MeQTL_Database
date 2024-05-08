@@ -6,9 +6,10 @@ source("resources/aux_rescources.R")
 # Associations
 top_assoc <- data.table::fread("resources/top_assoc.txt")
 clump_top_assoc <- data.table::fread("resources/ld_clump_assoc.txt")
+skin_cond_assoc <- data.table::fread("resources/skin_cond_assoc.txt")
 
 # Main  -----------------------------------------------------------------------
-function(input, output) {
+function(input, output, session) {
   
   # Helpers ---------------------------------------------------------------------
   
@@ -37,27 +38,38 @@ function(input, output) {
   # Select columns
   datasetInput <- reactive({
     datasetBase() %>%
-      select(any_of(c("CpG", "Top SNP", input$show_vars)))
+      select(any_of(c("CpG", "SNP", input$show_vars)))
   })
   
   # Render table
-  output$table <- DT::renderDT({
-    DT::datatable(datasetInput(),
-    # Scientific notation specification
-    options = list(
-      search = list(regex = TRUE),
-      rowCallback = DT::JS(
-        "function(row, data) {",
-        "for (i = 1; i < data.length; i++) {",
-        "if (data[i]<0.001 && data[i] > 0){",
-        "$('td:eq('+i+')', row).html(data[i].toExponential(2));",
-        "}",
-        "}",
-        "}"),
-      scrollX = TRUE)
-    )
+  output$table <- renderDT({
+    datatable(datasetInput(),
+              # Scientific notation specification
+              options = list(
+                search = list(regex = TRUE),
+                rowCallback = JS(
+                  "function(row, data) {",
+                  "for (i = 1; i < data.length; i++) {",
+                  "if (data[i]<0.001 && data[i] > 0){",
+                  "$('td:eq('+i+')', row).html(data[i].toExponential(2));",
+                  "}",
+                  "}",
+                  "}"),
+                columnDefs = list(list(
+                  targets = 2,
+                  render = JS(
+                    # Shorten SNP names
+                    "function(data, type, row, meta) {",
+                    "return type === 'display' && data.length > 18 ?",
+                    "'<span title=\"' + data + '\">' + data.substr(0, 18) + '...</span>' : data;",
+                    "}"))),
+                scrollX = TRUE)
+    ) %>%
+      formatRound(intersect(c("MAF","Beta","SE","P","FDR"),
+                            input$show_vars),
+                  digits=4, zero.print=0)
   })
-
+  
   # Downloadable csv ----------------------------------------------------------
   
   output$downloadTop <- downloadHandler(
@@ -71,15 +83,86 @@ function(input, output) {
     }
   )
   
-  # Locus plot  ---------------------------------------------------------------
+  # Skin reactive table --------------------------------------------------------
+  
+  # Selection of data set and filters
+  skin_datasetBase <- reactive({
+    df <- skin_cond_assoc
+    # Filter for type of association
+    if(!is.null(input$skin_type_assoc)) {
+      df <- df %>%
+        filter(`Cis/Trans` %in% input$skin_type_assoc)
+    }
+    # Filter by chromosome
+    if(!is.null(input$skin_chr_cpg)) {
+      df <- df %>%
+        filter(`CpG chr` %in% input$skin_chr_cpg)
+    }
+    return(df)
+  })
+  
+  # Select columns
+  skin_datasetInput <- reactive({
+    skin_datasetBase() %>%
+      select(any_of(c("CpG", "SNP", input$skin_show_vars)))
+  })
+  
+  # Render table
+  output$skin_table <- renderDT({
+    datatable(skin_datasetInput(),
+              # Scientific notation specification
+              options = list(
+                search = list(regex = TRUE),
+                rowCallback = JS(
+                  "function(row, data) {",
+                  "for (i = 1; i < data.length; i++) {",
+                  "if (data[i]<0.001 && data[i] > 0){",
+                  "$('td:eq('+i+')', row).html(data[i].toExponential(2));",
+                  "}",
+                  "}",
+                  "}"),
+                scrollX = TRUE)
+    ) %>%
+      formatRound(intersect(c("MAF","Beta","SE","P","FDR"),
+                            input$skin_show_vars),
+                  digits=4, zero.print=0)
+  })
+  
+  # Downloadable skin csv ------------------------------------------------------
+  
+  output$skin_downloadTop <- downloadHandler(
+    filename <- "skin_conditional_meQTL.txt",
+    content = function(file) {
+      write.table(skin_datasetInput(), file, row.names = FALSE, quote = FALSE, sep = "\t")
+    }
+  )
+  
+  output$skin_downloadFull <- downloadHandler(
+    filename <- "Skin_TwinsUK_All_FDR_5_percent_significant_Cis_meQTL_SNPs.txt.gz",
+    content = function(file) {
+      file.copy("resources/Skin_TwinsUK_All_FDR_5_percent_significant_Cis_meQTL_SNPs.txt.gz", file)
+    }
+  )
+  
+  # Locus plot  ----------------------------------------------------------------
+
+  # Observe inputs
+  observeEvent(input$plot_loci_1, {
+    updateNumericInput(session, "plot_range", value = input$plot_loci_2-input$plot_loci_1)
+  })
+  observeEvent(input$plot_loci_2, {
+    updateNumericInput(session, "plot_range", value = input$plot_loci_2-input$plot_loci_1)
+  })
+  observeEvent(input$plot_range, {
+    updateNumericInput(session, "plot_loci_2", value = input$plot_range + input$plot_loci_1)
+  })
   
   # Extract positions
   pos_loci <- eventReactive(input$do_plot, {
-    pos_loci <- stringr::str_extract_all(input$plot_loci, pattern = "[[:digit:]]+")
-    pos_loci <- as.numeric(pos_loci[[1]])
+    pos_loci <- c(input$plot_chr,input$plot_loci_1,input$plot_loci_2)
     
     # Check validity of positions
-    if(length(pos_loci) != 3 || !pos_loci[1] %in% 1:22 ||
+    if(any(is.na(pos_loci)) || !pos_loci[1] %in% 1:22 ||
        pos_loci[2] >= pos_loci[3] ||
        pos_loci[2] < 1 || pos_loci[3] > 2.5e8) {
       pos_loci <- NA
@@ -87,7 +170,7 @@ function(input, output) {
     
     return(pos_loci)
   })
-
+  
   # Filter data set for plot
   plotInput <- eventReactive(pos_loci(), {
     # Check validity of position
@@ -95,20 +178,24 @@ function(input, output) {
       return(NA)
     }
     
+    DT <- switch(input$plot_dataset,
+                 "EPIC DB" = clump_top_assoc,
+                 "Skin DB" = skin_cond_assoc)
+    
     if(input$plot_feat == "CpG") {
-      clump_top_assoc %>%
+      DT %>%
         subset(`CpG chr` == pos_loci()[1] &
                  `CpG pos` >= pos_loci()[2] &
                  `CpG pos` <= pos_loci()[3]) %>%
-        transmute(CpG, `Top SNP`, `LD clump`, Beta, SE, P, `Cis/Trans`,
+        transmute(CpG, `SNP`, Beta, SE, P, `Cis/Trans`,
                   POS = `CpG pos`, LOGP = ifelse(P == 0, 308, -log10(P)), # Axis for Manhattan plot
                   CHR_trans = `SNP pos`, POS_trans = `SNP pos`) # Links for circos plot
     } else {
-      clump_top_assoc %>%
+      DT %>%
         subset(`SNP chr` == pos_loci()[1] &
                  `SNP pos` >= pos_loci()[2] &
                  `SNP pos` <= pos_loci()[3]) %>%
-        transmute(CpG, `Top SNP`, `LD clump`, Beta, SE, P, `Cis/Trans`, 
+        transmute(CpG, `SNP`, Beta, SE, P, `Cis/Trans`, 
                   POS = `SNP pos`, LOGP = ifelse(P == 0, 308, -log10(P)),
                   CHR_trans = `CpG pos`, POS_trans = `CpG pos`)
     }
@@ -130,11 +217,5 @@ function(input, output) {
                itemdoubleclick = "toggle"
              ))
   })
-    
-  # Circos plot ---------------------------------------------------------------
   
 }
-  
-  
-  
-  
