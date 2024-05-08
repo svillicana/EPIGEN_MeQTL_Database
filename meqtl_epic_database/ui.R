@@ -6,12 +6,12 @@ library(shinycssloaders)
 library(shinyhelper)
 
 # Prepare filters
-col_top_assoc <- c("LD clump","CpG chr","CpG pos","SNP chr","SNP pos","A1",
-                   "A2","MAF","Beta","SE","P","FDR","N","n","Effects",
+col_top_assoc <- c("LD clump","CpG chr","CpG pos","SNP chr","SNP pos","Other Allele",
+                   "Effect Allele","MAF","Beta","SE","P","FDR","N","n","Effects",
                    "Cis/Trans")
 def_col <- c("CpG chr", "CpG pos","Beta", "SE", "P", "FDR", "Cis/Trans")
-col_skin <- c("CpG chr","CpG pos","SNP chr","SNP pos","Minor Allele",
-              "Major Allele","MAF","Beta","SE","P","FDR","Cis/Trans")
+col_skin <- c("CpG chr","CpG pos","SNP chr","SNP pos","Effect Allele",
+              "Other Allele","MAF","Beta","SE","P","FDR","Cis/Trans")
 
 # Main ------------------------------------------------------------------------
 
@@ -61,6 +61,8 @@ navbarPage(
                  helper(content = "cols"),
                # Button
                downloadButton("downloadTop", "Download"),
+               hr(),
+               a("Full FDR 5% results", href = "https://doi.org/10.5281/zenodo.8047777"),
                width = 2
              ),
              mainPanel(
