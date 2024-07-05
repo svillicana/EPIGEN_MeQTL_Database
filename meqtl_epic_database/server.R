@@ -217,5 +217,10 @@ function(input, output, session) {
                itemdoubleclick = "toggle"
              ))
   })
-  
+
+  exportTestValues(
+    epic_db = datasetInput(),
+    skin_db = skin_datasetInput()
+  )
+
 }
